@@ -209,13 +209,14 @@ core.export = pixmap => {
     const tiles = new Seq();
     const processorBlock = Blocks.microProcessor;
     
-    // We create a clean layout: Processors (1x1 blocks) on the left, Displays on the right.
-    // The separation is 1 tile block.
-    // Total Schematic Width = (Nx processors) + (1 tile gap) + (Nx * dispSize display tiles)
-    const displayGridStartX = Nx + 1; // Start X for the display grid
+    // NEW LAYOUT: Processors (1x1 blocks) in a column at X=0, 
+    // and the contiguous display grid starting immediately at X=1.
     
-    let maxWidth = 0;
-    let maxHeight = 0;
+    const procGridStartX = 0; 
+    const dispGridStartX = 1; // 1 block gap for the processor column
+
+    let finalMaxX = 0;
+    let finalMaxY = 0;
 
     for (let j = 0; j < Ny; j++) { // Row (Y)
         for (let i = 0; i < Nx; i++) { // Column (X)
@@ -223,12 +224,13 @@ core.export = pixmap => {
             
             if (tileIndex >= core.displayCount) continue; 
             
-            // a. Processor position (P_x, P_y) - grid starts at (0, 0)
-            const P_x = i;
-            const P_y = j;
+            // a. Processor position (P_x, P_y) - placed in a single column 
+            const P_x = procGridStartX;
+            // Place processors vertically down the side (0, 1, 2, ...)
+            const P_y = tileIndex; 
             
-            // b. Display position (D_x, D_y) - grid shifted right
-            const D_x = displayGridStartX + i * dispSize; 
+            // b. Display position (D_x, D_y) - contiguous grid shifted right by 1 block
+            const D_x = dispGridStartX + i * dispSize; 
             const D_y = j * dispSize; 
             
             // 1. Create Display Tile
@@ -243,22 +245,29 @@ core.export = pixmap => {
             const linkName = `display${tileIndex + 1}`;
             procBuild.links.add(new LogicBlock.LogicLink(dispTile.x, dispTile.y, linkName, true));
             
-            // Add the code (allCodes[tileIndex] is the array of code blocks for this tile)
+            // Add the code 
             procBuild.updateCode(allCodes[tileIndex].join("\n"));
             
             tiles.add(stile(procBuild.tile, procBuild.config()));
             
-            // Update schematic bounds
-            maxWidth = Math.max(maxWidth, D_x + dispSize);
-            maxHeight = Math.max(maxHeight, D_y + dispSize);
+            // Update schematic bounds based on the max extent of placed blocks
+            finalMaxX = Math.max(finalMaxX, D_x + dispSize);
+            finalMaxY = Math.max(finalMaxY, D_y + dispSize);
         }
     }
+    
+    // Check processor column height as well
+    finalMaxY = Math.max(finalMaxY, core.displayCount);
 
     core.stage = "Saving...";
     // Create and import schematic
     const tags = new StringMap();
     tags.put("name", `!!name me (${Nx}x${Ny} display grid)`);
-    const schem = new Schematic(tiles, tags, maxWidth, maxHeight);
+    // Schematic width/height is the max coordinate covered by blocks
+    const schemFinalWidth = finalMaxX;
+    const schemFinalHeight = finalMaxY;
+    
+    const schem = new Schematic(tiles, tags, schemFinalWidth, schemFinalHeight);
     
     Vars.schematics.add(schem);
     Vars.ui.schematics.hide();
